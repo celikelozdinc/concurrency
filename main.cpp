@@ -47,18 +47,64 @@ void taskRRef(Data&&) {
     std::cout << "Task getting Data&& is being executed!\n";
 }
 
+struct PDU {
+    int* _integer;
+    std::vector<double> _doubles;
+    friend std::ostream& operator<<(std::ostream& os, const PDU& thiz) {
+        return os << "At "<< &thiz << ", int : " << *(thiz._integer) << ", size of dynamic container : " << thiz._doubles.size() << " ";
+    }
+    PDU() {
+        //std::cout << *this << "will be default constructed!\n";
+        std::cout << this << " will be default constructed!\n";
+    }
+    ~PDU() noexcept {
+        //std::cout << *this << "will be destructing!\n";
+        std::cout << this << " will be destructing!\n";
+        delete _integer;
+    }
+    PDU(PDU&& rhs) {
+        //std::cout << this << " will be move constructed!\n";
+        _integer = std::move(rhs._integer);
+        _doubles = std::move(rhs._doubles);
+        rhs._integer = nullptr;
+        //std::cout << *this << "is move constructed!\n";
+    }
+};
+
+std::vector<int*> sharedPdu{};
+
+void printlines(int id) {
+    for (int i = 0; i < id; ++i) {
+        std::cout << "-";
+    }
+    std::cout << "Thread id " << id << " => ";
+}
+
+void process_pdu(PDU&& pdu, int id) {
+    // move construction of incoming PDU
+    PDU moved = std::move(pdu);
+    printlines(id); std::cout << moved << '\n';
+    printlines(id); std::cout << "Move constructed at " << (void*)(&moved) << " having " << *moved ._integer << " will be pushed to queue!" << '\n';
+    sharedPdu.push_back(moved._integer);
+    printlines(id);
+}
+
+void produce_pdu(int id) {
+    printlines(id);
+    std::unique_ptr<PDU> newPdu = std::make_unique<PDU>();
+    newPdu->_integer = new int(id);
+    process_pdu(std::move(*newPdu), id);
+    printlines(id);
+}
+
 int main() {
+    /*
     Data d;
     taskLRef(d);
-    //std::thread threadLRef1{taskLRef, d}; //std::thread arguments must be invocable after conversion to rvalues
-        //in instantiation of function template specialization 'std::thread::thread<void (&)(Data &), Data &, void>' requested here
     {
         std::thread threadLRef2{taskLRef, std::ref(d)};
         threadLRef2.detach();
     }
-    //std::thread threadLRef3{taskLRef, Data{}};
-        //in instantiation of function template specialization 'std::thread::thread<void (&)(Data &), Data, void>' requested here
-
     std::cout << "\n\n\n";
 
     taskCLRef(d);
@@ -91,9 +137,7 @@ int main() {
         std::thread thr{taskRRef, d};
         thr.detach();
     }
-
-    //std::thread thr{taskRRef, std::ref(d)};//std::thread arguments must be invocable after conversion to rvalues
-        //in instantiation of function template specialization 'std::thread::thread<void (&)(Data &&), std::reference_wrapper<Data>, void>' requested here
+    */
 
     /*
     std::unordered_map<int, Pack*> dict {
@@ -156,6 +200,16 @@ int main() {
     print(dict);
     */
 
+    std::cout << std::string(100, '_') << '\n';
+    {
+        for (int t = 1; t < 5 ; ++t) {
+            std::jthread th {produce_pdu, t};
+        }
+    }
+
+    for (const auto& s : sharedPdu) {
+        std::cout << *s << '\n';
+    }
 
     return 0;
 }
